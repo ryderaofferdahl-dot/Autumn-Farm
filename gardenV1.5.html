@@ -1,0 +1,395 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Autumn Farm</title>
+<style>
+:root{
+  --bg-day-start:#ffefdb;
+  --bg-day-end:#ffd7a6;
+  --bg-night-start:#2b1b12;
+  --bg-night-end:#1b0f08;
+  --panel: rgba(255,255,255,0.06);
+  --accent: #ffb857;
+  --muted: rgba(255,255,255,0.85);
+}
+*{box-sizing:border-box}
+body{
+  margin:0;
+  font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,"Helvetica Neue",Arial;
+  min-height:100vh;
+  color: #2b1406;
+  overflow:hidden;
+  transition: background 1.2s linear;
+  background: linear-gradient(180deg,var(--bg-day-start),var(--bg-day-end));
+}
+
+#leaves{
+  position:fixed; left:0; top:0; width:100%; height:100%; pointer-events:none; z-index:2;
+}
+
+.app{
+  position:relative; z-index:3;
+  display:flex; gap:18px; padding:18px;
+  align-items:flex-start; justify-content:center; min-height:100vh;
+}
+
+.panel{
+  background: linear-gradient(180deg, rgba(255,255,255,0.04), rgba(0,0,0,0.02));
+  border-radius:12px; padding:12px; box-shadow: 0 8px 30px rgba(0,0,0,0.25);
+  border:1px solid rgba(0,0,0,0.08);
+}
+
+.left{ width:720px; max-width:calc(100% - 380px); }
+.right{ width:320px; }
+
+header h1{ margin:6px 0 2px 0; font-size:20px; color:#5a2e0f; letter-spacing:0.6px }
+header p{ margin:0; color:#6a3f26; font-size:13px }
+
+.garden{ display:grid; grid-template-columns:repeat(5,1fr); gap:12px; padding:12px; }
+.plot{
+  aspect-ratio:1/1;
+  background: linear-gradient(180deg,#6b3e24,#4a2b18);
+  border-radius:12px; position:relative; overflow:hidden; cursor:pointer;
+  box-shadow: inset 0 -6px 12px rgba(0,0,0,0.3);
+  display:flex; align-items:flex-end; justify-content:center;
+  transition: transform .15s ease;
+}
+.plot:hover{ transform: translateY(-4px); }
+.soil{ position:absolute; left:0; right:0; bottom:0; height:34%; background:linear-gradient(180deg,#411f12,#2b160f); border-top-left-radius:18px;border-top-right-radius:18px;}
+.plant{ position:relative; bottom:28%; text-align:center; pointer-events:none; transform-origin:center bottom; transition: transform .3s ease, opacity .3s ease; }
+.plant .emoji{ font-size:26px; display:block; transform-origin:center; }
+
+.meter{ height:8px; width:80%; background:rgba(255,255,255,0.06); border-radius:8px; overflow:hidden; margin:6px auto; }
+.meter > i{ display:block; height:100%; background:linear-gradient(90deg,#ffd27a,#ff8f6b); width:0%; transition:width .4s ease; }
+
+.controls{ display:flex; gap:8px; flex-wrap:wrap; margin:12px 0; align-items:center; }
+button, select{ padding:8px 10px; border-radius:8px; border:0; background:var(--accent); color:#4a2308; font-weight:800; cursor:pointer; box-shadow: 0 6px 14px rgba(0,0,0,0.18); }
+button.ghost{ background:transparent; color:#5a2e0f !important;; border:1px solid rgba(255,255,255,0.06); box-shadow:none; font-weight:700; }
+.muted{color: #5a2e0f; /* dark brown */
+    font-size: 13px;}
+
+.shop{ display:flex; flex-direction:column; gap:10px; margin-top:12px; }
+.shop button{ background:#ffd27a; border:1px solid rgba(0,0,0,0.05); font-weight:800; }
+
+.right .panel{ position:sticky; top:18px; }
+
+footer{ margin-top:12px; color:rgba(0,0,0,0.45); font-size:12px; text-align:center; }
+
+#toast{ position:fixed; left:50%; transform:translateX(-50%); bottom:18px; background:rgba(0,0,0,0.6); color:white; padding:8px 12px; border-radius:8px; display:none; z-index:10; }
+
+@media (max-width:1000px){ .app{flex-direction:column; align-items:center} .left,.right{width:100%} .garden{grid-template-columns:repeat(4,1fr);} }
+</style>
+</head>
+<body>
+<div id="leaves"></div>
+
+<div class="app">
+  <div class="panel left">
+    <header>
+      <h1>Autumn Farm 🍁</h1>
+      <p class="muted">Tend your autumn patch. Plants grow over time; weather affects them. Progress is saved locally.</p>
+    </header>
+
+    <div class="controls">
+      <select id="seedSelect"></select>
+      <button id="plantBtn">Plant Seed</button>
+      <button id="waterBtn">Water 💧</button>
+      <button id="sunBtn">Sun ☀️</button>
+      <button id="sellBtn">Sell 🌾</button>
+      <button id="clearBtn" class="ghost">Clear Dead</button>
+      <button id="resetBtn" class="ghost">Reset Game</button>
+    </div>
+
+    <div class="panel" style="margin-top:8px">
+      <div class="garden" id="gardenGrid" aria-label="garden"></div>
+    </div>
+
+    <footer class="muted">Auto-save enabled • Hidden progression (you'll unlock new plants quietly)</footer>
+  </div>
+
+  <div class="panel right">
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <div>
+        <div class="muted">Coins</div>
+        <div style="font-size:20px;font-weight:900;color:#7a3b12" id="coins">0</div>
+      </div>
+      <div>
+        <div class="muted">Plots</div>
+        <div style="font-size:20px;font-weight:900;color:#7a3b12" id="plotsCount">0</div>
+      </div>
+    </div>
+
+    <div style="margin-top:12px">
+      <h4 style="margin:6px 0">Shop & Upgrades</h4>
+      <div class="shop">
+        <button id="buyFert">Buy Fertilizer (100)</button>
+        <button id="buySprink">Buy Sprinkler (150)</button>
+        <button id="buyLamp">Buy Solar Lamp (150)</button>
+        <button id="buyDecor">Buy Decor (200)</button>
+      </div>
+    </div>
+
+    <div style="margin-top:12px">
+      <h4 style="margin:6px 0">Weather</h4>
+      <div class="muted" id="weatherLabel">—</div>
+      <div class="muted" id="timeLabel" style="margin-top:6px"></div>
+    </div>
+
+    <div style="margin-top:12px">
+      <h4 style="margin:6px 0">Save / Transfer</h4>
+      <div style="display:flex;gap:8px">
+        <button id="exportBtn" class="ghost">Export</button>
+        <button id="importBtn" class="ghost">Import</button>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+// --- CONFIG ---
+const CONFIG = {
+  basePlots: 10,
+  cols:5,
+  saveKey:'autumn_farm_save_v1',
+  tickInterval:5000,
+  weatherChangeMs:120000,
+  offlineGrowthCapMinutes:60*12
+};
+
+const PLANT_CATALOG=[
+  {id:'poppy',label:'🌸 Poppy',cost:10,sell:25,growSeconds:60,unlockLevel:1},
+  {id:'carrot',label:'🥕 Carrot',cost:15,sell:40,growSeconds:90,unlockLevel:2},
+  {id:'pumpkin',label:'🎃 Pumpkin',cost:30,sell:90,growSeconds:200,unlockLevel:4},
+  {id:'sunflower',label:'🌻 Sunflower',cost:25,sell:70,growSeconds:140,unlockLevel:3},
+  {id:'aurum',label:'✨ Aurum Bloom',cost:80,sell:300,growSeconds:600,unlockLevel:7}
+];
+
+let state={
+  coins:80,
+  plots:[],
+  ownedUpgrades:{fertilizer:false,sprinkler:false,lamp:false,decor:false},
+  hidden:{xp:0,level:1,nextLevelXp:200},
+  weather:{kind:'sunny',changedAt:Date.now()},
+  lastSave:null,
+  unlockedPlants:['poppy']
+};
+
+function save(){state.lastSave=new Date().toISOString(); localStorage.setItem(CONFIG.saveKey,JSON.stringify(state));}
+function load(){try{const s=JSON.parse(localStorage.getItem(CONFIG.saveKey)||'');if(s&&s.plots){state=s;return true;}}catch(e){} return false;}
+function clamp(v,a,b){return Math.max(a,Math.min(b,v));}
+function byId(id){return document.getElementById(id);}
+function findPlantDef(id){return PLANT_CATALOG.find(p=>p.id===id);}
+function randomWeather(){const arr=['sunny','rain','cloudy','snow'];return arr[Math.floor(Math.random()*arr.length)];}
+function toast(msg,t=2500){const el=byId('toast'); el.textContent=msg; el.style.display='block'; setTimeout(()=>el.style.display='none',t);}
+
+// --- INIT ---
+function init(){
+  const saved = load();
+  if(!saved){
+    state.coins=80;
+    state.plots=Array(CONFIG.basePlots).fill(null);
+    state.ownedUpgrades={fertilizer:false,sprinkler:false,lamp:false,decor:false};
+    state.hidden={xp:0,level:1,nextLevelXp:200};
+    state.weather={kind: randomWeather(),changedAt:Date.now()};
+    state.lastSave=null;
+    state.unlockedPlants=['poppy'];
+    save();
+  } else {
+    if(!state.unlockedPlants || !state.unlockedPlants.includes('poppy')) state.unlockedPlants=['poppy'];
+    if(!state.plots || state.plots.length===0) state.plots=Array(CONFIG.basePlots).fill(null);
+  }
+  renderSeedOptions();
+  renderGrid();
+  renderRightPanel();
+  applyOfflineProgress();
+  startLoops();
+  createLeaves();
+}
+
+// --- SEED DROPDOWN ---
+function renderSeedOptions(){
+  const sel=byId('seedSelect'); sel.innerHTML='';
+  state.unlockedPlants.forEach(id=>{
+    const p=findPlantDef(id); if(!p) return;
+    const opt=document.createElement('option'); opt.value=p.id;
+    opt.textContent=`${p.label} (${p.cost})`; sel.appendChild(opt);
+  });
+}
+
+// --- GARDEN GRID ---
+let selectedPlot=null;
+function renderGrid(){
+  const grid=byId('gardenGrid'); grid.innerHTML='';
+  byId('plotsCount').textContent=state.plots.length;
+  state.plots.forEach((plot,idx)=>{
+    const el=document.createElement('div'); el.className='plot'; el.dataset.idx=idx;
+    if(state.ownedUpgrades.decor) el.style.border='2px solid rgba(255,215,150,0.4)';
+    const soil=document.createElement('div'); soil.className='soil'; el.appendChild(soil);
+
+    if(plot){
+      const plantWrap=document.createElement('div'); plantWrap.className='plant';
+      const growthPct=Math.round((plot.elapsedSec/plot.defGrowSec)*100);
+      const def=findPlantDef(plot.type);
+      const stage=growthPct>=100?'mature':growthPct>=50?'mid':'seed';
+      const emoji=document.createElement('div'); emoji.className='emoji';
+      emoji.textContent=stage==='mature'?def.label:stage==='mid'?'🌿':'🌱';
+      plantWrap.appendChild(emoji);
+      const meter=document.createElement('div'); meter.className='meter';
+      const inner=document.createElement('i'); inner.style.width=clamp(growthPct,0,100)+'%'; meter.appendChild(inner);
+      plantWrap.appendChild(meter);
+      const stat=document.createElement('div'); stat.style.position='absolute'; stat.style.top='6px'; stat.style.right='8px';
+      stat.style.fontSize='12px'; stat.style.background='rgba(0,0,0,0.18)'; stat.style.padding='4px 6px';
+      stat.style.borderRadius='8px'; stat.style.color='white'; stat.textContent=`💧${Math.round(plot.water)} ☀️${Math.round(plot.sun)}`;
+      el.appendChild(stat);
+      el.appendChild(plantWrap);
+      if(plot.dead){el.style.filter='grayscale(80%)'; el.style.opacity='0.6';}
+    } else {
+      const hint=document.createElement('div'); hint.style.position='absolute'; hint.style.fontSize='12px';
+      hint.style.color='rgba(255,255,255,0.12)'; hint.textContent='tap to select'; el.appendChild(hint);
+    }
+
+    el.addEventListener('click',()=>{
+      selectedPlot=idx;
+      document.querySelectorAll('.plot').forEach(p=>p.style.outline='');
+      el.style.outline='3px solid rgba(255,200,120,0.14)';
+    });
+    grid.appendChild(el);
+  });
+  byId('coins').textContent=state.coins;
+}
+
+// --- PLANTING ---
+byId('plantBtn').addEventListener('click',()=>{
+  if(selectedPlot===null){return alert('Select a plot first');}
+  if(state.plots[selectedPlot]) return alert('Plot occupied');
+  const seedId=byId('seedSelect').value;
+  const def=findPlantDef(seedId); if(!def) return alert('Invalid seed');
+  if(state.coins<def.cost) return alert('Not enough coins');
+
+  const now=Date.now();
+  state.plots[selectedPlot]={type:def.id,plantedAt:now,elapsedSec:0,defGrowSec:def.growSeconds,
+                            water:60+Math.random()*20,sun:60+Math.random()*20,
+                            health:80+Math.random()*10,mature:false,dead:false,lastTick:now};
+  state.coins-=def.cost;
+  save(); renderGrid();
+});
+
+// --- RESET BUTTON ---
+byId('resetBtn').addEventListener('click',()=>{
+  if(confirm('Are you sure you want to reset your game?')){
+    localStorage.removeItem(CONFIG.saveKey);
+    location.reload();
+  }
+});
+
+// --- WATER / SUN / SELL / CLEAR ---
+byId('waterBtn').addEventListener('click',()=>{
+  if(selectedPlot===null){toast('Select a plot'); return;}
+  const p=state.plots[selectedPlot]; if(!p || p.dead){toast('No plant here'); return;}
+  p.water+=15; save(); renderGrid(); toast('Watered!');
+});
+byId('sunBtn').addEventListener('click',()=>{
+  if(selectedPlot===null){toast('Select a plot'); return;}
+  const p=state.plots[selectedPlot]; if(!p || p.dead){toast('No plant here'); return;}
+  p.sun+=15; save(); renderGrid(); toast('Exposed to Sun!');
+});
+byId('sellBtn').addEventListener('click',()=>{
+  if(selectedPlot===null){toast('Select a plot'); return;}
+  const p=state.plots[selectedPlot]; if(!p || p.dead || !p.mature){toast('Not ready'); return;}
+  const def=findPlantDef(p.type); state.coins+=def.sell;
+  state.plots[selectedPlot]=null;
+  save(); renderGrid(); toast(`Sold ${def.label} for ${def.sell} coins!`);
+});
+byId('clearBtn').addEventListener('click',()=>{
+  state.plots.forEach((p,i)=>{if(p&&p.dead) state.plots[i]=null;}); save(); renderGrid(); toast('Cleared dead plants');
+});
+
+// --- RIGHT PANEL ---
+function renderRightPanel(){
+  byId('coins').textContent=state.coins;
+  byId('plotsCount').textContent=state.plots.length;
+  byId('weatherLabel').textContent=state.weather.kind;
+}
+
+// --- OFFLINE PROGRESS ---
+function applyOfflineProgress(){
+  if(!state.lastSave) return;
+  const last=new Date(state.lastSave); const now=new Date();
+  const delta=Math.min((now-last)/1000/60,CONFIG.offlineGrowthCapMinutes);
+  state.plots.forEach(p=>{if(p&&!p.dead){p.elapsedSec+=delta*60;}});
+}
+
+// --- GAME LOOP ---
+function startLoops(){
+  setInterval(tickPlants, CONFIG.tickInterval);
+  setInterval(changeWeather, CONFIG.weatherChangeMs);
+}
+
+function tickPlants(){
+  const now=Date.now();
+  state.plots.forEach(p=>{
+    if(!p || p.dead) return;
+    const delta=(now-p.lastTick)/3000; p.lastTick=now;
+    p.elapsedSec+=delta;
+    p.water-=delta*0.5; p.sun-=delta*0.5;
+    if(p.water<=30||p.sun<=30) p.health-=delta*1.2;
+    if(p.health<=0) p.dead=true;
+    if(p.elapsedSec>=p.defGrowSec) p.mature=true;
+  });
+  save(); renderGrid();
+}
+
+function changeWeather(){
+  state.weather.kind=randomWeather();
+  renderRightPanel();
+  if(state.weather.kind==='rain'){state.plots.forEach(p=>{if(p&&!p.dead)p.water+=12;});}
+}
+
+// --- LEAVES FALLING ---
+function createLeaves(){
+  const leavesEl=byId('leaves');
+  for(let i=0;i<25;i++){
+    const leaf=document.createElement('div'); leaf.textContent='🍂';
+    leaf.style.position='absolute'; leaf.style.fontSize=(12+Math.random()*16)+'px';
+    leaf.style.left=Math.random()*100+'%'; leaf.style.top=Math.random()*100+'%';
+    leaf.style.opacity=Math.random()*0.6+0.4; leavesEl.appendChild(leaf);
+    animateLeaf(leaf);
+  }
+}
+function animateLeaf(el){
+  const duration=5000+Math.random()*7000;
+  const startX=parseFloat(el.style.left);
+  const startY=parseFloat(el.style.top);
+  let start=performance.now();
+  function anim(t){
+    let dt=t-start; let progress=(dt/duration);
+    if(progress>1){start=performance.now(); progress=0;}
+    el.style.top=(startY + progress*120)+'%';
+    el.style.left=(startX + Math.sin(progress*5)*5)+'%';
+    requestAnimationFrame(anim);
+  }
+  requestAnimationFrame(anim);
+}
+
+// --- EXPORT / IMPORT ---
+byId('exportBtn').addEventListener('click',()=>{
+  const s=JSON.stringify(state,null,2);
+  navigator.clipboard.writeText(s).then(()=>toast('Export copied!'));
+});
+byId('importBtn').addEventListener('click',()=>{
+  const s=prompt('Paste save string:');
+  if(!s) return;
+  try{const obj=JSON.parse(s); state=obj; save(); renderGrid(); renderRightPanel(); toast('Save loaded!');}
+  catch(e){toast('Invalid save string');}
+});
+
+// --- INIT ---
+init();
+</script>
+</body>
+</html>
